@@ -114,3 +114,6 @@ class Kiwoom(QAxWidget):
             print("총수익률(%%): %s" % total_profit_loss_rate_result)
 
             self.detail_account_info_event_loop2.exit()
+
+
+            ###
