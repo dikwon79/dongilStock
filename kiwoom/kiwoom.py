@@ -1,14 +1,18 @@
+import os
 from PyQt5.QAxContainer import *
 from PyQt5.QtCore import *
-from sympy.physics.units import current
-
 from config.errorCode import *
 from PyQt5.QtTest import *
+from config.kiwoomType import *
+from log
 
 class Kiwoom(QAxWidget):
     def __init__(self):
         super().__init__()
         print("Kiwoom 클래스")
+
+        # config kiwoonType파일 import
+        self.realType = RealType()
 
         ######## eventloop 모듈
         self.login_event_loop = None
@@ -20,12 +24,17 @@ class Kiwoom(QAxWidget):
         self.screen_my_info = "2000"
         self.screen_calculation_stock = "4000"
 
+        self.screen_real_stock = "5000" #종목별로 할당할 스크린 번호
+        self.screen_meme_stock = "6000" #종목별 할당할 주문용 스크린 번호
+        self.screen_start_stop_real = "1000"
 
-        ######## 변수모음
+        ######################## 변수모음 #############################
         self.account_num = None
         self.account_stock_dict = {}
-        self.not_account_stock_dict ={}
-        ############################
+        self.not_account_stock_dict = {}
+        self.portfolio_stock_dict = {}
+        self.jango_dict = {}
+        ##############################################################
 
         ######## 종목 분석 용
         self.calcul_data = []
@@ -38,6 +47,9 @@ class Kiwoom(QAxWidget):
 
         self.get_ocx_instance()
         self.event_slots()
+
+        #실시간 이벤트 슬롯 등록
+        self.real_event_slots()
 
         #로그인
         self.signal_login_connect()
@@ -55,7 +67,24 @@ class Kiwoom(QAxWidget):
         self.not_concluded_account()
 
         # 종목 분석용, 임시
-        self.calculator_fnc()
+        # self.calculator_fnc()
+
+        # 저장된 종목들 불러온다
+        self.read_code()
+
+        # 스크린 번호를 할당
+        self.screen_number_setting()
+
+        # '' 종목코드 없으면 장을 체크, 마지막 0은 첫 등록시에
+        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", self.screen_start_stop_real, '',self.realType.REALTYPE['장시작시간']['장운영구분'], "0")
+
+        #관심 종목들을 portfolio_stock_dict에 보관하고 있다.
+        for code in self.portfolio_stock_dict.keys():
+            screen_num = self.portfolio_stock_dict[code]['스크린번호']
+            fids = self.realType.REALTYPE['주식체결']['체결시간']
+            self.dynamicCall("SetRealReg(QString, QString, QString, QString)", screen_num, code,
+                             fids, "1")
+            print("실시간 등록 코드 : %s, 스크린번호: %s, fids번호: %s" % (code, screen_num, fids))
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
@@ -63,6 +92,12 @@ class Kiwoom(QAxWidget):
     def event_slots(self):
         self.OnEventConnect.connect(self.login_slot)
         self.OnReceiveTrData.connect(self.trdata_slot)
+        self.OnReceiveMsg.connect(self.msg_slot)
+
+    # 실시간 슬롯
+    def real_event_slots(self):
+        self.OnReceiveRealData.connect(self.realdata_slot)
+        self.OnReceiveChejanData.connect(self.chejan_slot)
 
     def login_slot(self, err_code):
         print(errors(err_code))
@@ -70,7 +105,10 @@ class Kiwoom(QAxWidget):
         self.login_event_loop.exit()
 
     def signal_login_connect(self):
-        self.dynamicCall("CommConnect()")
+        ret = self.dynamicCall("CommConnect()")
+
+        if ret == 0:
+            logger.info("로그인 창 열기 성공")
 
         self.login_event_loop = QEventLoop()
         self.login_event_loop.exec_()
@@ -399,9 +437,371 @@ class Kiwoom(QAxWidget):
         self.dynamicCall("SetInputValue(QString, QString)", "종목코드", code)
         self.dynamicCall("SetInputValue(QString, QString)", "수정주가구분", "1")
 
-        if date !=None:
+        if date is not None:
             self.dynamicCall("SetInputValue(QString, QString)", "기분일자", date)
 
         self.dynamicCall("CommRqData(QString, QString, int, QString)", "주식일봉차트조회", "opt10081", sPrevNext, self.screen_calculation_stock)
 
         self.calculator_event_loop.exec_()
+
+    def read_code(self):
+
+        if os.path.exists("files/condition_stock.txt"):
+            f= open("files/condition_stock.txt", "r", encoding="utf8")
+
+            lines = f.readlines()
+            for line in lines:
+                if line !="":
+                    ls = line.split("\t")
+                    print(ls)
+                    stock_code = ls[0]
+                    stock_name = ls[1]
+                    stock_price = int(ls[2].split("\n")[0])
+                    stock_price = abs(stock_price)
+
+                    #현재가를 계속 업데이트 해줄 것이다.
+                    self.portfolio_stock_dict.update({stock_code: {"종목명":stock_name, "현재가":stock_price}})
+
+            f.close()
+            print(self.portfolio_stock_dict)
+
+    def screen_number_setting(self):
+        screen_overwrite = []
+
+        #계좌평가 잔고내역에 있는 종목들
+        for code in self.account_stock_dict.keys():
+            if code not in screen_overwrite:
+                screen_overwrite.append(code)
+        #미체결에 있는 종목들
+        for order_number in self.not_account_stock_dict.keys():
+            code = self.not_account_stock_dict[order_number]['종목코드']
+
+            if code not in screen_overwrite:
+                screen_overwrite.append(code)
+
+        #포트폴리오에 담겨져 있는 종목들
+        for code in self.portfolio_stock_dict.keys():
+            if code not in screen_overwrite:
+                screen_overwrite.append(code)
+
+
+        #스크린번호 할당
+        cnt = 0
+        for code in screen_overwrite:
+
+            temp_screen = int(self.screen_real_stock)
+            meme_screen = int(self.screen_meme_stock)
+
+            if(cnt % 50) == 0:
+                temp_screen += 1
+                self.screen_real_stock = str(temp_screen)
+
+            if (cnt % 50) == 0:
+                meme_screen += 1
+                self.screen_meme_stock = str(meme_screen)
+
+            if code in self.portfolio_stock_dict.keys():
+                self.portfolio_stock_dict[code].update({"스크린번호": str(self.screen_real_stock)})
+                self.portfolio_stock_dict[code].update({"주문용스크린번호": str(self.screen_meme_stock)})
+
+            elif code not in self.portfolio_stock_dict.keys():
+                self.portfolio_stock_dict.update(
+                    {code: {"스크린번호": str(self.screen_real_stock), "주문용스크린번호": str(self.screen_meme_stock)}})
+
+            cnt += 1
+        print(self.portfolio_stock_dict)
+
+    def realdata_slot(self, sCode, sRealType, sREalData):
+
+        if sRealType == "장시작시간":
+            fid = self.realTYpe.REALTYPE[sRealType]['장운영구분']
+            value = self.dynamicCall("GetCommRealData(QString, int)", sCode, fid)
+
+            if value == "0":
+                print("장 시작 전")
+            elif value == "3":
+                print("장 시작")
+            elif value == "2":
+                print("장 종료, 동시호가로 넘어감")
+            elif value == "4":
+                print("3시30분 장 종료")
+
+                for code in self.portfolio_stock_dict.keys():
+                    self.dynamicCall("SetRealRemove(QString, QString)", self.portfolio_stock_dict[sCode]['스크린번호'],
+                                     sCode)
+
+                QTest.qWait(5000)
+
+                self.file_delete()
+                self.calculator_fnc()
+
+
+        elif sRealType == "주식체결":
+            a = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['체결시간'])
+            b = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['현재가'])
+            b = abs(int(b))
+
+            c = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['전일대비'])
+            c = abs(int(c))
+
+            d = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['등락율'])
+            d = float(d)
+
+            e = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['(최우선)매도호가)'])
+            e = abs(int(e))
+            f = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['(최우선)매수호가)'])
+            f = abs(int(f))
+            g = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['거래량'])
+            g = abs(int(g))
+            h = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['체결시간'])
+            h = abs(int(h))
+
+            i = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['고가'])
+            i = abs(int(i))
+            j = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['시가'])
+            j = abs(int(j))
+            k = self.dynamicCall("GetCommRealData(QString, int)", sCode, self.realType.REALTYPE[sRealType]['저가'])
+            k = abs(int(k))
+
+            if sCode not in self.portfolio_stock_dict:
+                self.portfolio_stock_dict.update({sCode:{}})
+
+            self.portfolio_stock_dict[sCode].update({"체결시간" : a})
+            self.portfolio_stock_dict[sCode].update({"현재가": b})
+            self.portfolio_stock_dict[sCode].update({"전일대비": c})
+            self.portfolio_stock_dict[sCode].update({"등락율": d})
+            self.portfolio_stock_dict[sCode].update({"(최우선)매도호가": e})
+            self.portfolio_stock_dict[sCode].update({"(최우선)매수호가": f})
+            self.portfolio_stock_dict[sCode].update({"거래량": g})
+            self.portfolio_stock_dict[sCode].update({"누적거래량": h})
+            self.portfolio_stock_dict[sCode].update({"고가": i})
+            self.portfolio_stock_dict[sCode].update({"시가": j})
+            self.portfolio_stock_dict[sCode].update({"저가": k})
+
+            print(self.portfolio_stock_dict[sCode])
+
+            # 계좌 잔고평가내역에 있고 오늘 산 잔고에는 없을 경우
+            if sCode in self.account_stock_dict.keys() and sCode not in self.jango_dict.keys():
+                print("%s %s" % ("신규매도를 한다", sCode))
+
+                asd = self.account_stock_dict[sCode]
+
+                meme_rate = (b - asd['매입가']) / asd['매입가'] * 100
+
+                if asd['매매가능수량'] > 0 and (meme_rate > 5 or meme_rate < -5):
+                    order_success = self.dynamicCall("SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
+                                 ["신규매도", self.portfolio_stock_dict[sCode]['주문용스크린번호'], self.account_num, 2,
+                                 sCode,asd['매매가능수량'], 0, self.realType.SENDTYPE['거래구분']['시장가'], ""])
+
+                    if order_success == 0:
+                        print("매도주문 전달 성공")
+                        del self.account_stock_dict[sCode]
+                    else:
+                        print("매도주문 전달 실패")
+
+
+            # 오늘 산 잔고에 있을 경우
+            elif sCode in self.jango_dict.keys():
+                print("%s %s" % ("신규매도를 한다2", sCode))
+
+                jd = self.jango_dict[sCode]
+                meme_rate = (b - jd['매입단가']) / jd['매입단가'] * 100
+
+                if jd['주문가능수량'] > 0 and (meme_rate > 5 or meme_rate < -5):
+                    order_success = self.dynamicCall(
+                        "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
+                        ["신규매도", self.portfolio_stock_dict[sCode]['주문용스크린번호'], self.account_num, 2,
+                         sCode, jd['매매가능수량'], 0, self.realType.SENDTYPE['거래구분']['시장가'], ""])
+
+
+                    if order_success == 0:
+                        self.logging.logger.debug("매도주문 전달 성공")
+
+                    else:
+                        self.logging.logger.debug("매도주문 전달 실패")
+
+
+
+            #등락율이 2.0이상이고 오늘 산 잔고에 없을 경우
+            elif d > 2.0 and sCode not in self.jango_dict:
+
+                print("%s %s" % ("신규매수를 한다", sCode))
+
+                result = (self.use_money * 0.1) / e
+                quantity = int(result)
+
+
+                order_success = self.dynamicCall(
+                    "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
+                    ["신규매수", self.portfolio_stock_dict[sCode]["주문용스크린번호"], self.account_num, 1, sCode, quantity, e, self.realType.SENDTYPE['거래구분']['지정가'],""]
+
+                )
+
+                if order_success == 0:
+                    self.logging.logger.debug("매수주문 전달 성공")
+                else:
+                    self.logging.logger.debug("매수주문 전달 실패")
+
+
+            # not_account_stock_dic에서 데이타가 바뀔수 있으므로 에러 방지위해서 변수에 담아 놓는다.
+            not_meme_list = list(self.not_account_stock_dict)
+
+            for order_num in not_meme_list:
+                code = self.not_account_stock_dict[order_num]['종목코드']
+                meme_price = self.not_account_stock_dict[order_num]['주문가격']
+                not_quantity = self.not_account_stock_dict[order_num]['미체결수량']
+                order_gubun = self.not_account_stock_dict[order_num]['주문구분']
+
+                if order_gubun == "매수" and not_quantity > 0 and e > meme_price:
+                    print("%s %s" % ("매수취소 한다", sCode))
+                    if order_gubun == "신규매수" and not_quantity > 0 and e > meme_price:
+                        order_success = self.dynamicCall(
+                            "SendOrder(QString, QString, QString, int, QString, int, int, QString, QString)",
+                            ["매수취소", self.portfolio_stock_dict[sCode]["주문용스크린번호"], self.account_num, 3, code, 0, 0,
+                             self.realType.SENDTYPE['거래구분']['지정가'], order_num]
+                        )
+                        if order_success == 0:
+                            self.logging.logger.debug("매수취소 전달 성공")
+                        else:
+                            self.logging.logger.debug("매수취소 전달 실패")
+
+
+                elif not_quantity == 0:
+                    del self.not_account_stock_dict[order_num]
+
+    def chejan_slot(self, sGubun, nItemCnt, sFIdList):
+        if int(sGubun) == 0:
+            print("주문체결")
+            account_num = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['계좌번호'])
+            sCode = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['종목코드'][1:])
+            stock_name = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['종목명'])
+            stock_name = stock_name.strip()
+
+            origin_order_number = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['원주문번호'])
+            order_number = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문번호'])
+            order_status = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문상태'])
+            order_guan = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문수량'])
+            order_guan = int(order_guan)
+
+            order_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문가격'])
+            order_price = int(order_price)
+
+            not_chegual_quan = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['미체결수량'])
+            not_cheguql_quan = int(not_chegual_quan)
+
+            order_gubun = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문구분'])
+            order_gubun = order_gubun.strip().lstrip('+').lstrip('-')
+
+            chegual_time_str = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['주문/체결시간'])
+
+            chegual_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['체결가'])
+
+            if chegual_price =='':
+                chegual_price = 0
+            else:
+                chegual_price = int(chegual_price)
+
+            chegual_quantity = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['체결량'])
+
+            if chegual_quantity == '':
+                chegual_quantity = 0
+            else:
+                chegual_quantity = int(chegual_quantity)
+
+            current_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['현재가'])
+            current_price = abs(int(current_price))
+
+            first_sell_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['(최우선)매도호가)'])
+            first_sell_price = abs(int(first_sell_price))
+
+            first_buy_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['주문체결']['(최우선)매수호가)'])
+            first_buy_price = abs(int(first_buy_price))
+
+            ######## 새로 들어온 주문이면 주문번호 할당
+            if order_number not in self.not_account_stock_dict.keys():
+                self.not_account_stock_dict.update({order_number: {}})
+
+
+            self.not_account_stock_dict[order_number].update({"종목코드": sCode})
+            self.not_account_stock_dict[order_number].update({"주문번호": order_number})
+            self.not_account_stock_dict[order_number].update({"종목명": stock_name})
+            self.not_account_stock_dict[order_number].update({"주문상태": order_status})
+            self.not_account_stock_dict[order_number].update({"주문수량": order_guan})
+            self.not_account_stock_dict[order_number].update({"주문가격": order_price})
+            self.not_account_stock_dict[order_number].update({"미체결수량": not_cheguql_quan})
+            self.not_account_stock_dict[order_number].update({"원주문번호": origin_order_number})
+            self.not_account_stock_dict[order_number].update({"주문구분": order_gubun})
+            self.not_account_stock_dict[order_number].update({"주문/체결시간": chegual_time_str})
+            self.not_account_stock_dict[order_number].update({"체결가": chegual_price})
+            self.not_account_stock_dict[order_number].update({"체결량": chegual_quantity})
+            self.not_account_stock_dict[order_number].update({"현재가": current_price})
+            self.not_account_stock_dict[order_number].update({"(최우선)매도호가": first_sell_price})
+            self.not_account_stock_dict[order_number].update({"(최우선)매수호가": first_buy_price})
+
+            print(self.not_account_stock_dict)
+
+
+
+
+
+
+
+        elif int(sGubun) == 1:
+            print("잔고")
+            account_num = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['계좌번호'])
+            sCode = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['종목코드'][1:])
+            stock_name = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['종목명'])
+            stock_name = stock_name.strip()
+
+            current_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['현재가'])
+            current_price = abs(int(current_price))
+
+            stock_quan = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['보유수량'])
+            stock_quan = int(stock_quan)
+
+            like_quan = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['주문가능수량'])
+            like_quan = int(like_quan)
+
+            buy_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['매입단가'])
+            buy_price = abs(int(buy_price))
+
+            total_buy_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['총매입가'])
+            total_buy_price = int(total_buy_price)
+
+            meme_gubun = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['매도매수구분'])
+            meme_gubun = self.realType.REALTYPE['매도수구분'][meme_gubun]
+
+            first_sell_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['(최우선)매도호가'])
+            first_sell_price = abs(int(first_sell_price))
+
+            first_buy_price = self.dynamicCall("GetChejanData(int)", self.realType.REALTYPE['잔고']['(최우선)매수호가'])
+            first_buy_price = abs(int(first_buy_price))
+
+            if sCode not in self.jango_dict.keys():
+                self.jango_dict.update({sCode: {}})
+
+            self.jango_dict[sCode].update({"현재가": current_price})
+            self.jango_dict[sCode].update({"종목코드": sCode})
+            self.jango_dict[sCode].update({"종목명": stock_name})
+            self.jango_dict[sCode].update({"보유수량": stock_quan})
+            self.jango_dict[sCode].update({"주문가능수량": like_quan})
+            self.jango_dict[sCode].update({"매입단가": buy_price})
+            self.jango_dict[sCode].update({"총매입가": total_buy_price})
+            self.jango_dict[sCode].update({"매도매수구분": meme_gubun})
+            self.jango_dict[sCode].update({"(최우선)매도호가": first_sell_price})
+            self.jango_dict[sCode].update({"(최우선)매수호가": first_buy_price})
+
+            if stock_quan == 0:
+                del self.jango_dict[sCode]
+            self.dynamicCall("SetRealRemove(QString, QString)", self.portfolio_stock_dict[sCode]['스크린번호'], sCode)
+
+
+    #송수신 메세지 get
+
+    def msg_slot(self, sScrNo, sRQName, sTrCode, msg):
+        print("스크린: %s, 요청이름: %s, tr코드: %s --- %s" %(sScrNo, sRQName, sTrCode, msg))
+
+    #파일삭제
+    def file_delete(self):
+        if os.path.isfile("files/condition_stock.txt"):
+            os.remove("files/condition_stock.txt")
