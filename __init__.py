@@ -7,4 +7,3 @@ class Main:
         Ui()
 if __name__=='__main__':
     Main()
-

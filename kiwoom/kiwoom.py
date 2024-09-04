@@ -4,7 +4,6 @@ from PyQt5.QtCore import *
 from config.errorCode import *
 from PyQt5.QtTest import *
 from config.kiwoomType import *
-from log
 
 class Kiwoom(QAxWidget):
     def __init__(self):
@@ -49,50 +48,55 @@ class Kiwoom(QAxWidget):
         self.event_slots()
 
         #실시간 이벤트 슬롯 등록
-        self.real_event_slots()
+        #self.real_event_slots()
 
         #로그인
         self.signal_login_connect()
 
+
+
+
         # 계좌비밀번호 설정 호출(함수이용)
         #self.dynamicCall("KOA_Functions(String, String)", "ShowAccountWindow", "")
 
-        self.get_account_info()
-        self.detail_account_info() #예수금 가져오는것
+        #self.get_account_info()
+        #self.detail_account_info() #예수금 가져오는것
 
         # 계좌평가 잔고내역 요청
-        self.detail_acount_mystock()
+        #self.detail_acount_mystock()
 
         # 미체결 요청
-        self.not_concluded_account()
+        #self.not_concluded_account()
 
         # 종목 분석용, 임시
         # self.calculator_fnc()
 
         # 저장된 종목들 불러온다
-        self.read_code()
+        #self.read_code()
 
         # 스크린 번호를 할당
-        self.screen_number_setting()
+        #self.screen_number_setting()
 
         # '' 종목코드 없으면 장을 체크, 마지막 0은 첫 등록시에
-        self.dynamicCall("SetRealReg(QString, QString, QString, QString)", self.screen_start_stop_real, '',self.realType.REALTYPE['장시작시간']['장운영구분'], "0")
+        #self.dynamicCall("SetRealReg(QString, QString, QString, QString)", self.screen_start_stop_real, '',self.realType.REALTYPE['장시작시간']['장운영구분'], "0")
 
         #관심 종목들을 portfolio_stock_dict에 보관하고 있다.
-        for code in self.portfolio_stock_dict.keys():
-            screen_num = self.portfolio_stock_dict[code]['스크린번호']
-            fids = self.realType.REALTYPE['주식체결']['체결시간']
-            self.dynamicCall("SetRealReg(QString, QString, QString, QString)", screen_num, code,
-                             fids, "1")
-            print("실시간 등록 코드 : %s, 스크린번호: %s, fids번호: %s" % (code, screen_num, fids))
+        # for code in self.portfolio_stock_dict.keys():
+        #     screen_num = self.portfolio_stock_dict[code]['스크린번호']
+        #     fids = self.realType.REALTYPE['주식체결']['체결시간']
+        #     self.dynamicCall("SetRealReg(QString, QString, QString, QString)", screen_num, code,
+        #                      fids, "1")
+        #     print("실시간 등록 코드 : %s, 스크린번호: %s, fids번호: %s" % (code, screen_num, fids))
 
     def get_ocx_instance(self):
         self.setControl("KHOPENAPI.KHOpenAPICtrl.1")
 
     def event_slots(self):
         self.OnEventConnect.connect(self.login_slot)
-        self.OnReceiveTrData.connect(self.trdata_slot)
-        self.OnReceiveMsg.connect(self.msg_slot)
+        self.OnReceiveConditionVer.connect(self.receive_condition)
+        #self.OnReceiveTrData.connect(self.trdata_slot)
+        #self.OnReceiveMsg.connect(self.msg_slot)
+
 
     # 실시간 슬롯
     def real_event_slots(self):
@@ -101,17 +105,27 @@ class Kiwoom(QAxWidget):
 
     def login_slot(self, err_code):
         print(errors(err_code))
-
         self.login_event_loop.exit()
+        if err_code == 0:
+            self.after_login()
 
     def signal_login_connect(self):
-        ret = self.dynamicCall("CommConnect()")
-
-        if ret == 0:
-            logger.info("로그인 창 열기 성공")
-
+        self.dynamicCall("CommConnect()")
         self.login_event_loop = QEventLoop()
         self.login_event_loop.exec_()
+
+
+    def after_login(self):
+        print("조건 검색 정보 요청")
+        self.dynamicCall("GetConditionLoad()")
+
+    def receive_condition(self):
+        condition_info = self.dynamicCall("GetConditionNameList()").split(';')
+        for condition_name_idx_str in condition_info:
+            if len(condition_name_idx_str) == 0:
+                continue
+            condition_idx, condition_name = condition_name_idx_str.split('^')
+            print(condition_idx, condition_name)
 
     def get_account_info(self):
         account_list = self.dynamicCall("GetLoginInfo(String)", "ACCNO")
