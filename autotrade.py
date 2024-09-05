@@ -9,8 +9,11 @@ from queue import Queue
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QAxContainer import QAxWidget
 from PyQt5 import QtGui, uic
-from PyQt5.QtCore import Qt, QSettings, QTimer, QCoreApplication, QAbstractTableModel
+from PyQt5.QtCore import Qt, pyqtSignal, QSettings, QTimer, QThread, QAbstractTableModel
 
+import requests
+from bs4 import BeautifulSoup
+import re
 
 form_class = uic.loadUiType("main.ui")[0]
 
@@ -48,7 +51,47 @@ class PandasModel(QAbstractTableModel):
     def flags(self, index):
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
+class DataFetcher(QThread):
+    # 데이터 업데이트가 완료되면 시그널을 발생시킴
+    data_fetched = pyqtSignal(pd.DataFrame)
 
+    def run(self):
+        # 주기적으로 데이터를 가져오는 작업
+        while True:
+            url = 'https://finance.naver.com/sise/theme.naver'
+            response = requests.get(url)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            table = soup.find('table', class_='type_1')
+
+            rows = []
+            i = 0
+            for row in table.find_all('tr'):
+                columns = row.find_all('td')
+                coltext = []
+                for col in columns:
+                    text = col.text.strip()
+                    if text:
+                        coltext.append(text)
+                    link = col.find('a')
+                    if link:
+                        href = link.get('href')
+                        link_text = link.text.strip()
+                        if link_text:
+                            coltext.append(href)
+                if coltext:
+                    rows.append({
+                        "테마" : coltext[0],
+                        "주도주1": coltext[7],
+                        "주도주2": coltext[9],
+                        "링크": f"https://finance.naver.com{coltext[1]}",
+                    })
+                    if i == 5:
+                        break
+                    else:
+                        i +=1
+            df = pd.DataFrame(rows)
+            self.data_fetched.emit(df)  # 데이터를 전달
+            self.msleep(500)  # 1초 대기
 class KiwoomAPI(QMainWindow, form_class):
     def __init__(self):
         super().__init__()
@@ -72,6 +115,21 @@ class KiwoomAPI(QMainWindow, form_class):
                 "수익률",
             ]
         )
+
+        self.daily_top_df = pd.DataFrame(
+            columns=[
+                "테마",
+                "주도주1",
+                "주도주2",
+                "링크",
+            ]
+        )
+
+        # 데이터 가져오는 스레드 실행
+        self.data_thread = DataFetcher()
+        self.data_thread.data_fetched.connect(self.update_table)
+        self.data_thread.start()
+
         self.accountTableView.resizeColumnsToContents()
         self.accountTableView.resizeRowsToContents()
 
@@ -118,6 +176,8 @@ class KiwoomAPI(QMainWindow, form_class):
         self.timer6 = QTimer()
         self.timer7 = QTimer()
         self.timer8 = QTimer()
+        #self.timer9 = QTimer() # 네이버
+
 
         # Connect the timeout signal to the update_pandas_models method
         self.timer1.timeout.connect(self.update_pandas_models)
@@ -128,10 +188,70 @@ class KiwoomAPI(QMainWindow, form_class):
         self.timer6.timeout.connect(self.save_pickle)
         self.timer7.timeout.connect(self.check_unfinished_orders)
         self.timer8.timeout.connect(self.check_outliers)
+        #self.timer9.timeout.connect(self.naver_api)
 
 
         #cell 클릭 이벤트
         self.watchListTableView.clicked.connect(self.on_cell_clicked)
+
+    def update_table(self, df):
+        # UI 업데이트는 메인 스레드에서만 해야 함
+        self.daily_top_df = df
+        # TableView 업데이트 로직 추가
+        self.dailytopTableView.resizeColumnsToContents()
+        self.dailytopTableView.resizeRowsToContents()
+
+    def naver_api(self):
+        url = 'https://finance.naver.com/sise/theme.naver'
+
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        table = soup.find('table', class_='type_1')
+
+
+        # 테이블의 모든 행 추출
+        i = 0
+        for row in table.find_all('tr'):
+
+            columns = row.find_all('td')
+
+            coltext = []
+            for col in columns:
+                # 셀 텍스트 추출
+
+                text = col.text.strip()
+                if text:  # 빈 텍스트가 아닌 경우만 추가
+                    coltext.append(text)
+
+                # 셀 내의 링크 추출
+                link = col.find('a')
+                if link:
+                    href = link.get('href')
+                    link_text = link.text.strip()
+                    if link_text:
+                        coltext.append(href)
+
+            if coltext:  # 빈 리스트가 아닌 경우만 추가
+
+                i+=1
+                if i == 6:
+                    break
+                else:
+                    # stock_code = None
+                    # match = re.search(r'code=(\d+)', coltext[1])
+                    # if match:
+                    #     stock_code = match.group(1)
+                    # print(coltext)
+                    self.daily_top_df.loc[coltext[0]] = {
+                        "주도주1": coltext[7],
+                        "주도주2": coltext[9],
+                        "링크": f"https://finance.naver.com{coltext[1]}",
+
+                    }
+        self.dailytopTableView.resizeColumnsToContents()
+        self.dailytopTableView.resizeRowsToContents()
+
+
 
     def on_cell_clicked(self, index):
 
@@ -274,6 +394,9 @@ class KiwoomAPI(QMainWindow, form_class):
         self.watchListTableView.setModel(pd_model2)
         pd_model3 = PandasModel(self.account_info_df)
         self.accountTableView.setModel(pd_model3)
+        pd_model4 = PandasModel(self.daily_top_df)
+        self.dailytopTableView.setModel(pd_model4)
+
 
     def receive_tr_data(self, sScrNo, sRQName, sTrCode, sRecordName, sPrevNext, nDataLength, sErrorCode, sMessage, sSplmMsg):
         # SScrNo:화면번호 SROName: 사용자 구분명 sTrCode: TR이름, sRecordName:레코드 이름 sPrevNext: 연속조회 유무를  판단한는 값 0
@@ -522,6 +645,7 @@ class KiwoomAPI(QMainWindow, form_class):
         self.timer6.start(30000)  # 30초마다 저장
         self.timer7.start(100)  # 0.1초마다 저장
         self.timer8.start(1000)  # 1초마다 저장
+        #self.timer9.start(1000) #1초마다
 
     def _receive_condition(self):
         condition_info = self.kiwoom.dynamicCall("GetConditionNameList()").split(';')

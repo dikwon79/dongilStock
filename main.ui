@@ -7,13 +7,13 @@
     <x>0</x>
     <y>0</y>
     <width>1008</width>
-    <height>770</height>
+    <height>900</height>
    </rect>
   </property>
   <property name="maximumSize">
    <size>
     <width>1008</width>
-    <height>770</height>
+    <height>900</height>
    </size>
   </property>
   <property name="baseSize">
@@ -65,17 +65,17 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>150</y>
+     <y>120</y>
      <width>261</width>
-     <height>361</height>
+     <height>521</height>
     </rect>
    </property>
   </widget>
   <widget class="QLineEdit" name="buyAmountLineEdit">
    <property name="geometry">
     <rect>
-     <x>490</x>
-     <y>10</y>
+     <x>890</x>
+     <y>40</y>
      <width>81</width>
      <height>21</height>
     </rect>
@@ -90,21 +90,21 @@
   <widget class="QLabel" name="label">
    <property name="geometry">
     <rect>
-     <x>310</x>
-     <y>10</y>
-     <width>231</width>
+     <x>790</x>
+     <y>40</y>
+     <width>101</width>
      <height>20</height>
     </rect>
    </property>
    <property name="text">
-    <string>종목편입시 매수금액(원) :</string>
+    <string>매수금액(원) :</string>
    </property>
   </widget>
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>310</x>
-     <y>40</y>
+     <x>790</x>
+     <y>70</y>
      <width>131</width>
      <height>16</height>
     </rect>
@@ -116,8 +116,8 @@
   <widget class="QLineEdit" name="goalReturnLineEdit">
    <property name="geometry">
     <rect>
-     <x>430</x>
-     <y>40</y>
+     <x>910</x>
+     <y>70</y>
      <width>61</width>
      <height>21</height>
     </rect>
@@ -135,8 +135,8 @@
   <widget class="QLabel" name="label_3">
    <property name="geometry">
     <rect>
-     <x>310</x>
-     <y>70</y>
+     <x>790</x>
+     <y>100</y>
      <width>121</width>
      <height>16</height>
     </rect>
@@ -148,8 +148,8 @@
   <widget class="QLineEdit" name="stopLossLineEdit">
    <property name="geometry">
     <rect>
-     <x>430</x>
-     <y>70</y>
+     <x>910</x>
+     <y>100</y>
      <width>61</width>
      <height>21</height>
     </rect>
@@ -165,7 +165,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>550</y>
+     <y>680</y>
      <width>961</width>
      <height>201</height>
     </rect>
@@ -175,7 +175,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>120</y>
+     <y>90</y>
      <width>261</width>
      <height>16</height>
     </rect>
@@ -188,7 +188,7 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>520</y>
+     <y>650</y>
      <width>311</width>
      <height>16</height>
     </rect>
@@ -201,7 +201,7 @@
    <property name="geometry">
     <rect>
      <x>300</x>
-     <y>150</y>
+     <y>280</y>
      <width>681</width>
      <height>361</height>
     </rect>
@@ -213,8 +213,8 @@
   <widget class="QLabel" name="label_6">
    <property name="geometry">
     <rect>
-     <x>310</x>
-     <y>120</y>
+     <x>300</x>
+     <y>250</y>
      <width>64</width>
      <height>15</height>
     </rect>
@@ -226,14 +226,37 @@
   <widget class="QLabel" name="currentBalanceLabel">
    <property name="geometry">
     <rect>
-     <x>790</x>
-     <y>120</y>
+     <x>760</x>
+     <y>250</y>
      <width>201</width>
      <height>16</height>
     </rect>
    </property>
    <property name="text">
     <string>계좌 평가 금액 </string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_7">
+   <property name="geometry">
+    <rect>
+     <x>300</x>
+     <y>10</y>
+     <width>131</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>주도주정보:</string>
+   </property>
+  </widget>
+  <widget class="QTableView" name="dailytopTableView">
+   <property name="geometry">
+    <rect>
+     <x>300</x>
+     <y>30</y>
+     <width>481</width>
+     <height>211</height>
+    </rect>
    </property>
   </widget>
  </widget>
