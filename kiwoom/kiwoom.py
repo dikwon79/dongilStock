@@ -75,7 +75,7 @@ class Kiwoom(QAxWidget):
         #self.read_code()
 
         # 스크린 번호를 할당
-        #self.screen_number_setting()
+        self.screen_number_setting()
 
         # '' 종목코드 없으면 장을 체크, 마지막 0은 첫 등록시에
         #self.dynamicCall("SetRealReg(QString, QString, QString, QString)", self.screen_start_stop_real, '',self.realType.REALTYPE['장시작시간']['장운영구분'], "0")
@@ -94,8 +94,8 @@ class Kiwoom(QAxWidget):
     def event_slots(self):
         self.OnEventConnect.connect(self.login_slot)
         self.OnReceiveConditionVer.connect(self.receive_condition)
-        #self.OnReceiveTrData.connect(self.trdata_slot)
-        #self.OnReceiveMsg.connect(self.msg_slot)
+        self.OnReceiveTrData.connect(self.trdata_slot)
+        self.OnReceiveMsg.connect(self.msg_slot)
 
 
     # 실시간 슬롯
@@ -107,7 +107,9 @@ class Kiwoom(QAxWidget):
         print(errors(err_code))
         self.login_event_loop.exit()
         if err_code == 0:
+
             self.after_login()
+        self.login_event_loop.exit()
 
     def signal_login_connect(self):
         self.dynamicCall("CommConnect()")

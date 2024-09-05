@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1125</width>
+    <width>1008</width>
     <height>770</height>
    </rect>
   </property>
   <property name="maximumSize">
    <size>
-    <width>1125</width>
+    <width>1008</width>
     <height>770</height>
    </size>
   </property>
@@ -58,7 +58,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>조건식 편입버튼</string>
+    <string>조건식 편출버튼</string>
    </property>
   </widget>
   <widget class="QTableView" name="registeredTableView">
@@ -166,7 +166,7 @@
     <rect>
      <x>20</x>
      <y>550</y>
-     <width>1081</width>
+     <width>961</width>
      <height>201</height>
     </rect>
    </property>
@@ -202,10 +202,13 @@
     <rect>
      <x>300</x>
      <y>150</y>
-     <width>801</width>
+     <width>681</width>
      <height>361</height>
     </rect>
    </property>
+   <attribute name="horizontalHeaderStretchLastSection">
+    <bool>false</bool>
+   </attribute>
   </widget>
   <widget class="QLabel" name="label_6">
    <property name="geometry">
@@ -223,9 +226,9 @@
   <widget class="QLabel" name="currentBalanceLabel">
    <property name="geometry">
     <rect>
-     <x>760</x>
+     <x>790</x>
      <y>120</y>
-     <width>271</width>
+     <width>201</width>
      <height>16</height>
     </rect>
    </property>
